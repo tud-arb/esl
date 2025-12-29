@@ -138,7 +138,7 @@ pip install -r requirements.txt
    python main.py
    ```
 
-Progress bars will appear while loading large order book files. This takes up to 15 minutes to run for 7 days' worth of data. For the sake of consistency, I have already downloaded and processed a week of data for BTCUSDT, from 01.12.2025 to 07.12.2025.
+Progress bars will appear while loading large order book files. This takes up to 15 minutes to run for 7 days' worth of data. For the sake of consistency, I have already downloaded and processed a week of data for BTCUSDT, from 01.12.2025 to 07.12.2025. DO NOT push the raw data files to Github.
 
 ---
 
