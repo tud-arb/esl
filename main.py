@@ -7,8 +7,13 @@ from src.features import compute_orderbook_features
 from src.save_load import save_dataset, load_dataset
 
 # CONFIG
+
 SYMBOL = "BTCUSDT"
-INTERVAL = "1m"
+# Binance candle interval
+CANDLE_INTERVAL = "1m"
+
+# Pandas resample frequency
+OB_RESAMPLE_FREQ = "1min"
 
 BASE_DATA_DIR = Path("data")
 RAW_DIR = BASE_DATA_DIR / SYMBOL / "raw"
@@ -30,13 +35,7 @@ def create_labels(close: pd.Series) -> pd.Series:
 
 
 def main():
-    # 1. Candles
-    candles = fetch_candles(SYMBOL, INTERVAL, limit=1000)
-    candle_df = candles.copy()
-    candle_df["return"] = candle_df["close"].pct_change()
-    candle_df.dropna(inplace=True)
-
-    # 2. Stream order books
+    # 1. Stream order books
     orderbook_files = sorted(glob(str(RAW_DIR / f"2025-12-*_{SYMBOL}_ob200.*")))
 
     rows = []
@@ -51,6 +50,11 @@ def main():
 
             if len(rows) >= BATCH_SIZE:
                 df = pd.DataFrame(rows, index=timestamps)
+
+                if parquet_path.exists():
+                    existing = load_dataset(parquet_path)
+                    df = pd.concat([existing, df]).sort_index()
+
                 save_dataset(df, parquet_path)
                 rows.clear()
                 timestamps.clear()
@@ -58,12 +62,39 @@ def main():
     # Final flush
     if rows:
         df = pd.DataFrame(rows, index=timestamps)
+
+        if parquet_path.exists():
+            existing = load_dataset(parquet_path)
+            df = pd.concat([existing, df]).sort_index()
+
         save_dataset(df, parquet_path)
 
-    # 3. Load OB features
+    # 2. Load OB features
     ob_df = load_dataset(parquet_path)
 
-    # 4. Align
+    ob_df = (
+        ob_df
+        .sort_index()
+        .resample(OB_RESAMPLE_FREQ)
+        .mean()
+        .dropna()
+    )
+
+    ob_start = ob_df.index.min()
+    ob_end = ob_df.index.max()
+
+    # 3. Candles
+    candles = fetch_candles(
+        SYMBOL,
+        CANDLE_INTERVAL,
+        start_time=ob_start.floor("min"),
+        end_time=ob_end.ceil("min"),
+    )
+    candle_df = candles.copy()
+    candle_df["return"] = candle_df["close"].pct_change()
+    candle_df = candle_df.dropna(subset=["return"])
+
+    # 4. Align candles & order book features
     common_idx = candle_df.index.intersection(ob_df.index)
     candle_df = candle_df.loc[common_idx]
     ob_df = ob_df.loc[common_idx]
@@ -90,6 +121,39 @@ def main():
 
     print("Finished successfully.")
 
+    # 8. Load & validate final datasets
+    print("\nValidating saved datasets...")
+
+    dataset_paths = {
+        "candle": PROCESSED_DIR / "dataset_candle.parquet",
+        "orderbook": PROCESSED_DIR / "dataset_orderbook.parquet",
+        "combined": PROCESSED_DIR / "dataset_combined.parquet",
+    }
+
+    datasets = {}
+
+    for name, path in dataset_paths.items():
+        if not path.exists():
+            raise FileNotFoundError(f"{name} dataset not found at {path}")
+
+        df = load_dataset(path)
+
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"{name} dataset is not a pandas DataFrame")
+
+        if df.empty:
+            raise ValueError(f"{name} dataset is EMPTY")
+
+        if "target" not in df.columns:
+            raise ValueError(f"{name} dataset missing 'target' column")
+
+        datasets[name] = df
+
+        print(f"\n{name.upper()} DATASET")
+        print(f"Shape: {df.shape}")
+        print(df.head(3))
+
+    print("\nAll datasets validated successfully.")
 
 if __name__ == "__main__":
     main()

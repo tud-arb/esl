@@ -5,14 +5,39 @@ from pathlib import Path
 import requests
 from tqdm import tqdm
 
-def fetch_candles(symbol: str, interval: str = "1m", limit: int = 1000):
+def fetch_candles(
+    symbol: str,
+    interval: str,
+    start_time: pd.Timestamp,
+    end_time: pd.Timestamp,
+    limit: int = 1000,
+):
     url = "https://api.binance.com/api/v3/klines"
-    params = {"symbol": symbol.upper(), "interval": interval, "limit": limit}
-    resp = requests.get(url, params=params)
-    data = resp.json()
+
+    start_ms = int(start_time.timestamp() * 1000)
+    end_ms = int(end_time.timestamp() * 1000)
+
+    all_rows = []
+
+    while start_ms < end_ms:
+        params = {
+            "symbol": symbol.upper(),
+            "interval": interval,
+            "startTime": start_ms,
+            "limit": limit,
+        }
+
+        resp = requests.get(url, params=params)
+        data = resp.json()
+
+        if not data:
+            break
+
+        all_rows.extend(data)
+        start_ms = data[-1][0] + 1
 
     df = pd.DataFrame(
-        data,
+        all_rows,
         columns=[
             "open_time","open","high","low","close","volume",
             "close_time","quote_asset_volume","num_trades",

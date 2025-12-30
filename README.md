@@ -128,9 +128,12 @@ pip install -r requirements.txt
 
    ```python
    SYMBOL = "BTCUSDT"
-   INTERVAL = "1m"
+   CANDLE_INTERVAL = "1m"
+   OB_RESAMPLE_FREQ = "1min"
+
    PRED_HORIZON = 1
    STABILITY_THRESHOLD = 0.0002
+   BATCH_SIZE = 10_000
    ```
 
 3. **Run the pipeline**:
@@ -138,7 +141,7 @@ pip install -r requirements.txt
    python main.py
    ```
 
-Progress bars will appear while loading large order book files. This takes up to 15 minutes to run for 7 days' worth of data. For the sake of consistency, I have already downloaded and processed a week of data for BTCUSDT, from 01.12.2025 to 07.12.2025. DO NOT push the raw data files to Github.
+Progress bars will appear while loading large order book files. It takes about 5 minutes to load 1 day of data on my machine. For the sake of consistency, I have already downloaded and processed a week of data for BTCUSDT, from 01.12.2025 to 07.12.2025. DO NOT push the raw data files to Github. 
 
 ---
 
