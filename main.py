@@ -3,7 +3,7 @@ from pathlib import Path
 from glob import glob
 
 from src.data_loader import fetch_candles, iter_bybit_orderbooks
-from src.features import compute_orderbook_features
+from src.features import compute_orderbook_features, compute_candle_features
 from src.save_load import save_dataset, load_dataset
 
 # CONFIG
@@ -90,9 +90,7 @@ def main():
         start_time=ob_start.floor("min"),
         end_time=ob_end.ceil("min"),
     )
-    candle_df = candles.copy()
-    candle_df["return"] = candle_df["close"].pct_change()
-    candle_df = candle_df.dropna(subset=["return"])
+    candle_df = compute_candle_features(candles)
 
     # 4. Align candles & order book features
     common_idx = candle_df.index.intersection(ob_df.index)
