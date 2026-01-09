@@ -36,7 +36,7 @@ def create_labels(close: pd.Series) -> pd.Series:
 
 def main():
     # 1. Stream order books
-    orderbook_files = sorted(glob(str(RAW_DIR / f"2025-12-*_{SYMBOL}_ob200.*")))
+    orderbook_files = sorted(glob(str(RAW_DIR / f"2025-*-*_{SYMBOL}_ob200.*")))
 
     rows = []
     timestamps = []
