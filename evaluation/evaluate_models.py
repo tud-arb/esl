@@ -21,6 +21,13 @@ from evaluation.metrics import classification_metrics
 from evaluation.stats import aggregate_results
 from evaluation.plot_utils import plot_metric_boxplot
 from evaluation.cv import time_series_cv
+from evaluation.feature_importance import (
+    importance_logreg_pipeline,
+    importance_tree_model,
+    normalise_importance,
+    aggregate_importance_across_folds,
+    consensus_top_features,
+)
 
 PROCESSED_DIR = Path("data") / "BTCUSDT" / "processed"
 
@@ -98,6 +105,7 @@ for ds_name, df in datasets.items():
         X[c] = pd.to_numeric(X[c], errors="coerce")
     
     X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    feature_names = list(X.columns)
 
     all_fold_results[ds_name] = {}
     results[ds_name] = {}
@@ -105,6 +113,7 @@ for ds_name, df in datasets.items():
 
     for model_name, model in make_models().items():
         fold_results = []
+        fold_importances = {}
 
         for fold, (train_idx, test_idx) in enumerate(
             time_series_cv(
@@ -120,13 +129,40 @@ for ds_name, df in datasets.items():
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
+            try:
+                if model_name == "logreg":
+                    imp_df = importance_logreg_pipeline(model, feature_names).df
+                elif model_name in ("xgboost", "lightgbm"):
+                    imp_df = importance_tree_model(model, feature_names).df
+                else:
+                    imp_df = None
+
+                if imp_df is not None:
+                    fold_importances[fold] = normalise_importance(imp_df)  
+            except Exception:
+                fold_importances[fold] = None
+
             metrics = classification_metrics(y_test, preds)
             metrics["fold"] = fold
-
             fold_results.append(metrics)
 
         all_fold_results[ds_name][model_name] = fold_results
         results[ds_name][model_name] = aggregate_results(fold_results)
+        valid = {k: v for k, v in fold_importances.items() if v is not None}
+        if valid:
+            agg_imp = aggregate_importance_across_folds(valid)
+            out_path = Path("figures") / f"feature_importance_{ds_name}_{model_name}.csv"
+            agg_imp.to_csv(out_path, index=False)
+
+    tables = {}
+    for model_name in all_fold_results[ds_name].keys():
+        p = Path("figures") / f"feature_importance_{ds_name}_{model_name}.csv"
+        if p.exists():
+            tables[model_name] = pd.read_csv(p)
+
+    cons = consensus_top_features(tables, top_k=20)
+    cons_path = Path("figures") / f"feature_consensus_top20_{ds_name}.csv"
+    cons.to_csv(cons_path, index=False)
 
 rows = []
 for dataset, models in results.items():
